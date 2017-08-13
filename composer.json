@@ -1,0 +1,12 @@
+{
+  "name": "drupal/product_taxonomy_filter",
+  "type": "drupal-module",
+  "authors": [
+    {
+      "name": "Martin Klima",
+      "email": "martin.klima@hqis.cz"
+    }
+  ],
+  "license": "GPL-2.0+",
+  "require": {}
+}
