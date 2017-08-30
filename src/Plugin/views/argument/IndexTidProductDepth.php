@@ -7,10 +7,14 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\taxonomy\Plugin\views\argument\IndexTidDepth;
 
 /**
- * Argument handler for taxonomy terms with depth.
+ * Argument handler for products with taxonomy terms with depth.
  *
- * This handler is actually part of the node table and has some restrictions,
- * because it uses a subquery to find nodes with.
+ * Normally taxonomy terms with depth contextual filter can be used
+ * only for content. This handler can be used for Drupal commerce products.
+ *
+ * Handler expects reference field name, gets reference table and column and
+ * builds sub query on that table. That is why handler does not need special
+ * relation table like taxonomy_index.
  *
  * @ingroup views_argument_handlers
  *
@@ -23,9 +27,28 @@ class IndexTidProductDepth extends IndexTidDepth {
    */
   protected $termStorage;
 
+  /**
+   * Extend options.
+   *
+   * @return array
+   */
+  protected function defineOptions() {
+    $options = parent::defineOptions();
+    $options['reference_field'] = ['default' => 'field_product_category'];
+    return $options;
+  }
 
+
+  /**
+   * @inheritdoc
+   */
   public function buildOptionsForm(&$form, FormStateInterface $form_state) {
-    parent::buildOptionsForm($form, $form_state);
+    $form['reference_field'] = [
+      '#type' => 'textfield',
+      '#title' => $this->t('Reference field'),
+      '#default_value' => $this->options['reference_field'],
+      '#description' => $this->t('The field name (machine name) in the product type, which is referencing to a taxonomy. For example field_product_category.'),
+    ];
 
     $form['depth'] = [
       '#type' => 'weight',
@@ -41,13 +64,17 @@ class IndexTidProductDepth extends IndexTidDepth {
       '#default_value' => !empty($this->options['break_phrase']),
     ];
 
+    parent::buildOptionsForm($form, $form_state);
   }
 
   /**
-   * Override defaultActions() to remove summary actions.
+   * @inheritdoc
    */
-
   public function query($group_by = FALSE) {
+    // Get the DB table and reference column name from the reference field name.
+    $refFieldName = $this->options['reference_field'] . '_target_id';
+    $refTableName = 'commerce_product__' . $this->options['reference_field'];
+
     $this->ensureMyTable();
 
     if (!empty($this->options['break_phrase'])) {
@@ -59,21 +86,19 @@ class IndexTidProductDepth extends IndexTidDepth {
       $operator = (count($break->value) > 1) ? 'IN' : '=';
       $tids = $break->value;
     }
-    else {
+  else {
       $operator = "=";
       $tids = $this->argument;
     }
 
     // Now build the subqueries.
-    // @todo fix hardcoded commerce_product__field_product_category table.
-    // @todo fix hardcoded field_product_category_target_id field.
-    $subquery = db_select('commerce_product__field_product_category', 'pt');
+    $subquery = db_select($refTableName, 'pt');
     $subquery->addField('pt', 'entity_id');
-    $where = db_or()->condition('pt.field_product_category_target_id', $tids, $operator);
+    $where = db_or()->condition('pt.' . $refFieldName, $tids, $operator);
     $last = "pt";
 
     if ($this->options['depth'] > 0) {
-      $subquery->leftJoin('taxonomy_term_hierarchy', 'th', "th.tid = pt.field_product_category_target_id");
+      $subquery->leftJoin('taxonomy_term_hierarchy', 'th', "th.tid = pt." . $refFieldName);
       $last = "th";
       foreach (range(1, abs($this->options['depth'])) as $count) {
         $subquery->leftJoin('taxonomy_term_hierarchy', "th$count", "$last.parent = th$count.tid");
@@ -93,13 +118,15 @@ class IndexTidProductDepth extends IndexTidDepth {
     $this->query->addWhere(0, "$this->tableAlias.$this->realField", $subquery, 'IN');
   }
 
+  /**
+   * @inheritdoc
+   */
   public function title() {
     $term = $this->termStorage->load($this->argument);
     if (!empty($term)) {
       $title = $term->getName();
       return $title;
     }
-    // TODO review text
     return $this->t('No name');
   }
 
