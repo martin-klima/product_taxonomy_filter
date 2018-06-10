@@ -19,6 +19,10 @@ function product_taxonomy_filter_views_data_alter(&$data) {
       'id' => 'taxonomy_index_tid_product_depth',
       'accept depth modifier' => TRUE,
     ],
+    'filter' => [
+      'title' => t('Product has taxonomy term ID (with depth)'),
+      'id' => 'taxonomy_index_tid_product_depth',
+    ]
   ];
 }
 
